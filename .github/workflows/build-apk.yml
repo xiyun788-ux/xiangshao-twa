@@ -69,16 +69,17 @@ jobs:
       - name: Decode keystore for build
         run: echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > keystore.jks
 
-      - name: Init TWA project from live manifest
+      # 用仓库内置 manifest（自带绝对 start_url+sharecode 与本地图标），
+      # 不依赖线上站点静态文件路径；改壳时改这个文件即可。
+      - name: Init TWA project from local manifest
         run: |
-          bubblewrap init --manifest https://suike.app.workbuddy.host/manifest.webmanifest \
+          bubblewrap init --manifest ./manifest.webmanifest \
             --packageId com.xiangshao.grade3 \
             --appName "英语小花园" \
             --host suike.app.workbuddy.host \
             --themeColor "#4CAF6E" \
             --navigationColor "#4CAF6E" \
             --backgroundColor "#FDF8EE" \
-            --startUrl / \
             --shortName "英语小花园" \
             --targetSdkVersion 34 \
             --minSdkVersion 21 \
