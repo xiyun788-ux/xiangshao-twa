@@ -51,27 +51,34 @@ jobs:
           yes | sdkmanager --licenses
           sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
 
-      - name: Install Bubblewrap CLI
-        run: npm install -g @bubblewrap/cli
+      - name: Install Bubblewrap CLI + secret sealing dep
+        run: |
+          npm install -g @bubblewrap/cli
+          npm install tweetsodium@0.0.4
 
-      # 首次运行：用 keytool 生成签名密钥并保存为仓库 Secret（需 GH_PAT）。
+      # 首次运行：用 keytool 生成签名密钥，并通过 REST API（libsodium 密封）写入仓库 Secret。
       # 之后 SIGNING_KEYSTORE 已存在，跳过生成，直接使用。
+      # 注意：刻意不用 `gh secret set`——`gh auth login --with-token` 会强制要求 token 带 read:org
+      #       权限，我们的 PAT 只有 repo(+workflow)，gh 会直接报错失败。
       - name: Bootstrap signing keystore (one-time)
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SECRET_NAME: SIGNING_KEYSTORE
         run: |
-          echo "$GH_PAT" | gh auth login --with-token
-          if gh secret list | grep -q SIGNING_KEYSTORE; then
+          set -euo pipefail
+          EXISTING=$(curl -fsSL -H "Authorization: token $GH_PAT" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/secrets")
+          if echo "$EXISTING" | grep -q SIGNING_KEYSTORE; then
             echo "SIGNING_KEYSTORE already exists — reuse."
           else
             echo "Generating signing keystore and storing as repo secret…"
             keytool -genkeypair -v -keystore keystore.jks -keyalg RSA -keysize 2048 -validity 36500 \
               -alias "$KEY_ALIAS" -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
               -dname "CN=XiYun, OU=XiYun, O=XiYun, L=Changsha, ST=Hunan, C=CN"
-            base64 -w0 keystore.jks | gh secret set SIGNING_KEYSTORE
-            echo "Keystore stored as secret SIGNING_KEYSTORE."
+            base64 -w0 keystore.jks > keystore.b64
+            node scripts/seal-secret.mjs
           fi
 
       - name: Decode keystore for build
