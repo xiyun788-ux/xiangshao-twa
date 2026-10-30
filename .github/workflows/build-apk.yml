@@ -2,23 +2,38 @@ name: Build TWA APK
 
 # 作用：用 Google 官方 Bubblewrap 把线上 PWA 打包成**我们自己的签名密钥**签名的安卓 APK。
 # 触发器：手动（workflow_dispatch）或推送 main 分支时自动构建。
-# 产物：app-release-signed.apk（GitHub Actions Artifact，可由仓库管理员下载后挂到 Web 站点）。
+# 产物：app-release-signed.apk（GitHub Actions Artifact + GitHub Release 免登录下载）。
 #
-# 需要的仓库 Secrets（首次运行前由管理员配置）：
-#   GH_PAT        —— 有 repo 权限的 GitHub Personal Access Token，仅用于「首次自动生成并保存签名密钥」，
-#                    密钥生成后此 Secret 可删除（后续构建直接复用已保存的 SIGNING_KEYSTORE）。
-#   STORE_PASSWORD—— keystore 密码（自定义一串强随机值）。
+# 稳定下载链接：
+#   https://github.com/xiyun788-ux/xiangshao-twa/releases/latest/download/app-release-signed.apk
+#
+# 需要的仓库 Secrets：
+#   GH_PAT        —— 有 repo 权限的 GitHub PAT，**仅**用于「首次自动生成并保存签名密钥」，
+#                    密钥生成后即可删除该 Secret（后续构建复用已保存的 SIGNING_KEYSTORE）。
+#   STORE_PASSWORD—— keystore 密码。
 #   KEY_PASSWORD  —— key 密码（可等同 store 密码）。
 #   SIGNING_KEYSTORE —— 首次运行由本工作流用 keytool 生成并自动写入；之后每次构建解码复用。
 #
 # 改内容（课程/音频/文案）不需要重打 APK（TWA 加载线上站点自动生效）；
-# 改壳（图标/名字/主题/起始页）才需要重新运行本工作流（同密钥覆盖安装，进度不丢）。
+# 改壳（图标/名字/主题/起始页）需要改 scripts/init-twa.mjs 里的 CFG 后重新运行本工作流。
+#
+# ─────────────────────────────────────────────────────────────
+# 为什么不用 `bubblewrap init` / `bubblewrap build`：
+#   1) init 是 inquirer 交互式（必须真 TTY），CI 无法自动化；
+#   2) init 在发现签名密钥不存在时会追加 7 个密码类提问，pty 驱动极易卡死；
+#   3) build 会额外打 AAB，耗时且需要 jarsigner。
+#   → 改为直接调用官方底层库 @bubblewrap/core 的 TwaManifest + TwaGenerator 免交互生成工程，
+#     再用 gradle assembleRelease + zipalign + apksigner 手动出签名 APK，全流程零交互。
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths-ignore: ['**/*.md']
+
+concurrency:
+  group: apk-build
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -27,6 +42,8 @@ jobs:
       contents: write
     env:
       KEY_ALIAS: xiangshao
+      # build-tools 36.1.0 = @bubblewrap/core 1.27.0 的 BUILD_TOOLS_VERSION
+      BUILD_TOOLS: 36.1.0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,23 +55,30 @@ jobs:
           java-version: 17
 
       # 手动安装 Android SDK（比 android-actions/setup-android 更稳，避免该 Action 偶发失败）。
+      # 同时装 35.0.0（AGP 8.9 的默认 build-tools）和 36.1.0（core 要求的版本）。
       - name: Set up Android SDK (manual)
         run: |
+          set -euo pipefail
           ANDROID_HOME=$HOME/android-sdk
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          mkdir -p "$ANDROID_HOME/cmdline-tools"
-          curl -fsSL -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          # core 的 AndroidSdkTools.validatePath 要求 SDK 根下存在 tools/ 或 bin/ 目录
+          mkdir -p "$ANDROID_HOME/cmdline-tools" "$ANDROID_HOME/tools"
+          curl -fsSL -o /tmp/cmdline-tools.zip \
+            https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
           unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
           mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          yes | sdkmanager --licenses
-          sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
+          yes | sdkmanager --licenses > /dev/null || true   # yes 会被 SIGPIPE，必须吞掉非 0 退出码
+          sdkmanager "build-tools;35.0.0" "build-tools;36.1.0" "platforms;android-36" "platform-tools"
 
-      - name: Install Bubblewrap CLI + secret sealing dep
+      - name: Install build dependencies
         run: |
-          npm install -g @bubblewrap/cli
-          npm install tweetsodium@0.0.4
+          set -euo pipefail
+          npm init -y > /dev/null
+          # @bubblewrap/core —— 免交互生成 TWA 工程
+          # tweetsodium     —— 首次生成密钥时用它做 libsodium seal 写仓库 Secret
+          npm install --no-save --no-audit --no-fund @bubblewrap/core@1.27.0 tweetsodium@0.0.4
 
       # 首次运行：用 keytool 生成签名密钥，并通过 REST API（libsodium 密封）写入仓库 Secret。
       # 之后 SIGNING_KEYSTORE 已存在，跳过生成，直接使用。
@@ -82,42 +106,47 @@ jobs:
           fi
 
       - name: Decode keystore for build
-        run: echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > keystore.jks
-
-      # bubblewrap init 是**交互式**的（inquirer）：必须给它真正的 TTY。
-      # 用管道喂输入时，第一个问题会把整块输入当成一个字符流吃掉、回车也不提交，
-      # 表现为 init 步骤一直 in_progress 直到 6 小时超时。
-      # 这里用 scripts/run-init.py 分配伪终端，按提示语顺序逐条回答。
-      #   ① 预置 ~/.bubblewrap/config.json → 跳过「是否安装 JDK / Android SDK」提问
-      #   ② 预置 android-keystore 文件      → 跳过「是否创建签名密钥」提问
-      - name: Init TWA project (scripted via pty)
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.bubblewrap"
-          printf '{"jdkPath":"%s","androidSdkPath":"%s"}' "$JAVA_HOME" "$ANDROID_HOME" > "$HOME/.bubblewrap/config.json"
-          cp keystore.jks android-keystore
-          python3 scripts/run-init.py bubblewrap init \
-            --manifest "https://suike.app.workbuddy.host/manifest.webmanifest?sharecode=24NRJSLYLH" \
-            --packageId com.xiangshao.grade3 \
-            --appName "英语小花园" \
-            --host suike.app.workbuddy.host \
-            --themeColor "#4CAF6E" \
-            --navigationColor "#4CAF6E" \
-            --backgroundColor "#FDF8EE" \
-            --shortName "英语小花园" \
-            --targetSdkVersion 34 \
-            --minSdkVersion 21 \
-            --areJavaDependenciesAccepted true
-
-      - name: Build signed APK
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: bubblewrap build \
-            --signingKeyPath ./keystore.jks \
-            --signingKeyAlias "$KEY_ALIAS" \
-            --signingKeyPassword "$KEY_PASSWORD" \
-            --signingStorePassword "$STORE_PASSWORD"
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > android.keystore
+          test -s android.keystore || { echo "SIGNING_KEYSTORE 为空，密钥生成/写入可能失败"; exit 1; }
+          keytool -list -keystore android.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | head -3
+
+      # 免交互生成 TWA Android 工程（twa/ 目录）
+      - name: Generate TWA Android project
+        run: node scripts/init-twa.mjs
+
+      - name: Build APK (gradle assembleRelease)
+        run: |
+          set -euo pipefail
+          cd twa
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Align + sign APK
+        env:
+          KS_PASS: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
+          UNSIGNED="twa/app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -f "$UNSIGNED" || { echo "未找到 $UNSIGNED"; ls -R twa/app/build/outputs || true; exit 1; }
+          "$BT/zipalign" -p -f 4 "$UNSIGNED" app-release-aligned.apk
+          "$BT/apksigner" sign \
+            --ks android.keystore \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KS_PASS \
+            --key-pass env:KEY_PASS \
+            --out app-release-signed.apk app-release-aligned.apk
+          echo "--- 验签 ---"
+          "$BT/apksigner" verify --verbose --print-certs app-release-signed.apk
+          echo "--- 包信息 ---"
+          "$BT/aapt2" dump badging app-release-signed.apk | head -12 || true
+          ls -la app-release-signed.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -127,12 +156,34 @@ jobs:
 
       # 发布到 GitHub Release，生成「任何人免登录可下载」的稳定链接：
       # https://github.com/xiyun788-ux/xiangshao-twa/releases/latest/download/app-release-signed.apk
+      # 用 REST API 而非 `gh release`：可幂等「有则更新同名资产、无则新建 release」。
       - name: Publish APK to GitHub Release
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete apk-build -y || true
-          gh release create apk-build app-release-signed.apk \
-            --title "英语小花园 APK（自动构建）" \
-            --notes "湘少版三年级英语辅助学习 App 的安卓安装包，使用本仓库自管签名密钥。安装前请允许「未知来源」安装。"
+          set -euo pipefail
+          API="https://api.github.com/repos/${{ github.repository }}"
+          AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
+
+          RID=$(curl -sSL "${AUTH[@]}" "$API/releases/tags/apk-build" | jq -r '.id // empty' || true)
+          if [ -z "$RID" ]; then
+            echo "创建 release apk-build …"
+            RID=$(curl -fsSL -X POST "${AUTH[@]}" -H "Content-Type: application/json" \
+              -d '{"tag_name":"apk-build","name":"英语小花园 APK（自动构建）","body":"湘少版三年级英语辅助学习 App 的安卓安装包，使用本仓库自管签名密钥。安装前请允许「未知来源」安装。","draft":false,"prerelease":false}' \
+              "$API/releases" | jq -r '.id')
+          else
+            echo "release apk-build 已存在（id=$RID），更新资产。"
+          fi
+
+          AID=$(curl -fsSL "${AUTH[@]}" "$API/releases/$RID/assets" \
+            | jq -r '.[] | select(.name=="app-release-signed.apk") | .id' | head -1)
+          if [ -n "$AID" ]; then
+            curl -fsSL -X DELETE "${AUTH[@]}" "$API/releases/$RID/assets/$AID"
+          fi
+
+          curl -fsSL -X POST "${AUTH[@]}" \
+            -H "Content-Type: application/vnd.android.apk" \
+            --data-binary @app-release-signed.apk \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RID/assets?name=app-release-signed.apk" \
+            | jq -r '"已上传: " + .name + " (" + (.size|tostring) + " bytes) -> " + .browser_download_url'
