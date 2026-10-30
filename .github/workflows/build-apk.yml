@@ -84,21 +84,24 @@ jobs:
       - name: Decode keystore for build
         run: echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > keystore.jks
 
-      # 用仓库内置 manifest（自带绝对 start_url+sharecode 与本地图标），
-      # 不依赖线上站点静态文件路径；改壳时改这个文件即可。
-      - name: Init TWA project from local manifest
+      # bubblewrap init 是**交互式**的（inquirer）：无 TTY 时第一个提问就收到 EOF → SIGINT（exit 130）。
+      # 三个绕过点：
+      #   ① 预置 ~/.bubblewrap/config.json → 跳过「是否安装 JDK / Android SDK」提问
+      #   ② 预置 android-keystore 文件      → 跳过「是否创建签名密钥」提问
+      #   ③ 用伪终端(script) + 预置答案文件喂给其余提问（顺序见 scripts/init-answers.txt）
+      # 注意：bubblewrap 的 --packageId/--appName 等 flag 实际不会写进 manifest，
+      #       真正生效的值来自交互回答，所以答案文件才是关键。
+      - name: Init TWA project (scripted)
         run: |
-          bubblewrap init --manifest ./manifest.webmanifest \
-            --packageId com.xiangshao.grade3 \
-            --appName "英语小花园" \
-            --host suike.app.workbuddy.host \
-            --themeColor "#4CAF6E" \
-            --navigationColor "#4CAF6E" \
-            --backgroundColor "#FDF8EE" \
-            --shortName "英语小花园" \
-            --targetSdkVersion 34 \
-            --minSdkVersion 21 \
-            --areJavaDependenciesAccepted true
+          set -euo pipefail
+          mkdir -p "$HOME/.bubblewrap"
+          printf '{"jdkPath":"%s","androidSdkPath":"%s"}' "$JAVA_HOME" "$ANDROID_HOME" > "$HOME/.bubblewrap/config.json"
+          cp keystore.jks android-keystore
+          if command -v script >/dev/null 2>&1; then
+            TERM=xterm script -qec "bash scripts/run-init.sh" /dev/null < scripts/init-answers.txt
+          else
+            bash scripts/run-init.sh < scripts/init-answers.txt
+          fi
 
       - name: Build signed APK
         env:
