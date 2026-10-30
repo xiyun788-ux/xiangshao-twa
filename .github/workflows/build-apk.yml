@@ -1,0 +1,101 @@
+name: Build TWA APK
+
+# 作用：用 Google 官方 Bubblewrap 把线上 PWA 打包成**我们自己的签名密钥**签名的安卓 APK。
+# 触发器：手动（workflow_dispatch）或推送 main 分支时自动构建。
+# 产物：app-release-signed.apk（GitHub Actions Artifact，可由仓库管理员下载后挂到 Web 站点）。
+#
+# 需要的仓库 Secrets（首次运行前由管理员配置）：
+#   GH_PAT        —— 有 repo 权限的 GitHub Personal Access Token，仅用于「首次自动生成并保存签名密钥」，
+#                    密钥生成后此 Secret 可删除（后续构建直接复用已保存的 SIGNING_KEYSTORE）。
+#   STORE_PASSWORD—— keystore 密码（自定义一串强随机值）。
+#   KEY_PASSWORD  —— key 密码（可等同 store 密码）。
+#   SIGNING_KEYSTORE —— 首次运行由本工作流用 keytool 生成并自动写入；之后每次构建解码复用。
+#
+# 改内容（课程/音频/文案）不需要重打 APK（TWA 加载线上站点自动生效）；
+# 改壳（图标/名字/主题/起始页）才需要重新运行本工作流（同密钥覆盖安装，进度不丢）。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ['**/*.md']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KEY_ALIAS: xiangshao
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK components + accept licenses
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
+
+      - name: Install Bubblewrap CLI
+        run: npm install -g @bubblewrap/cli
+
+      # 首次运行：用 keytool 生成签名密钥并保存为仓库 Secret（需 GH_PAT）。
+      # 之后 SIGNING_KEYSTORE 已存在，跳过生成，直接使用。
+      - name: Bootstrap signing keystore (one-time)
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$GH_PAT" | gh auth login --with-token
+          if gh secret list | grep -q SIGNING_KEYSTORE; then
+            echo "SIGNING_KEYSTORE already exists — reuse."
+          else
+            echo "Generating signing keystore and storing as repo secret…"
+            keytool -genkeypair -v -keystore keystore.jks -keyalg RSA -keysize 2048 -validity 36500 \
+              -alias "$KEY_ALIAS" -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
+              -dname "CN=XiYun, OU=XiYun, O=XiYun, L=Changsha, ST=Hunan, C=CN"
+            base64 -w0 keystore.jks | gh secret set SIGNING_KEYSTORE
+            echo "Keystore stored as secret SIGNING_KEYSTORE."
+          fi
+
+      - name: Decode keystore for build
+        run: echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > keystore.jks
+
+      - name: Init TWA project from live manifest
+        run: |
+          bubblewrap init --manifest https://suike.app.workbuddy.host/manifest.webmanifest \
+            --packageId com.xiangshao.grade3 \
+            --appName "英语小花园" \
+            --host suike.app.workbuddy.host \
+            --themeColor "#4CAF6E" \
+            --navigationColor "#4CAF6E" \
+            --backgroundColor "#FDF8EE" \
+            --startUrl / \
+            --shortName "英语小花园" \
+            --targetSdkVersion 34 \
+            --minSdkVersion 21 \
+            --areJavaDependenciesAccepted true
+
+      - name: Build signed APK
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: bubblewrap build \
+            --signingKeyPath ./keystore.jks \
+            --signingKeyAlias "$KEY_ALIAS" \
+            --signingKeyPassword "$KEY_PASSWORD" \
+            --signingStorePassword "$STORE_PASSWORD"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xiangshao-release-apk
+          path: app-release-signed.apk
