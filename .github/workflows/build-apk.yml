@@ -84,24 +84,30 @@ jobs:
       - name: Decode keystore for build
         run: echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > keystore.jks
 
-      # bubblewrap init 是**交互式**的（inquirer）：无 TTY 时第一个提问就收到 EOF → SIGINT（exit 130）。
-      # 三个绕过点：
+      # bubblewrap init 是**交互式**的（inquirer）：必须给它真正的 TTY。
+      # 用管道喂输入时，第一个问题会把整块输入当成一个字符流吃掉、回车也不提交，
+      # 表现为 init 步骤一直 in_progress 直到 6 小时超时。
+      # 这里用 scripts/run-init.py 分配伪终端，按提示语顺序逐条回答。
       #   ① 预置 ~/.bubblewrap/config.json → 跳过「是否安装 JDK / Android SDK」提问
       #   ② 预置 android-keystore 文件      → 跳过「是否创建签名密钥」提问
-      #   ③ 用伪终端(script) + 预置答案文件喂给其余提问（顺序见 scripts/init-answers.txt）
-      # 注意：bubblewrap 的 --packageId/--appName 等 flag 实际不会写进 manifest，
-      #       真正生效的值来自交互回答，所以答案文件才是关键。
-      - name: Init TWA project (scripted)
+      - name: Init TWA project (scripted via pty)
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.bubblewrap"
           printf '{"jdkPath":"%s","androidSdkPath":"%s"}' "$JAVA_HOME" "$ANDROID_HOME" > "$HOME/.bubblewrap/config.json"
           cp keystore.jks android-keystore
-          if command -v script >/dev/null 2>&1; then
-            TERM=xterm script -qec "bash scripts/run-init.sh" /dev/null < scripts/init-answers.txt
-          else
-            bash scripts/run-init.sh < scripts/init-answers.txt
-          fi
+          python3 scripts/run-init.py bubblewrap init \
+            --manifest "https://suike.app.workbuddy.host/manifest.webmanifest?sharecode=24NRJSLYLH" \
+            --packageId com.xiangshao.grade3 \
+            --appName "英语小花园" \
+            --host suike.app.workbuddy.host \
+            --themeColor "#4CAF6E" \
+            --navigationColor "#4CAF6E" \
+            --backgroundColor "#FDF8EE" \
+            --shortName "英语小花园" \
+            --targetSdkVersion 34 \
+            --minSdkVersion 21 \
+            --areJavaDependenciesAccepted true
 
       - name: Build signed APK
         env:
