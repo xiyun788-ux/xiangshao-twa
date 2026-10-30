@@ -219,9 +219,11 @@ jobs:
           fi
 
           AID=$(curl -fsSL "${AUTH[@]}" "$API/releases/$RID/assets" \
-            | jq -r '.[] | select(.name=="app-release-signed.apk") | .id' | head -1)
+            | jq -r 'map(select(.name=="app-release-signed.apk"))[0].id // empty')
           if [ -n "$AID" ]; then
-            curl -fsSL -X DELETE "${AUTH[@]}" "$API/releases/$RID/assets/$AID"
+            # 注意：删除资产要用 /releases/assets/{asset_id}，不是 /releases/{id}/assets/{asset_id}
+            echo "删除同名旧资产 asset_id=$AID"
+            curl -fsSL -X DELETE "${AUTH[@]}" "$API/releases/assets/$AID"
           fi
 
           curl -fsSL -X POST "${AUTH[@]}" \
