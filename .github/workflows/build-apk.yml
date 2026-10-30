@@ -94,12 +94,15 @@ jobs:
           set -euo pipefail
           EXISTING=$(curl -fsSL -H "Authorization: token $GH_PAT" -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/secrets")
-          if echo "$EXISTING" | grep -q SIGNING_KEYSTORE; then
+          if [[ "$EXISTING" == *"SIGNING_KEYSTORE"* ]]; then
             echo "SIGNING_KEYSTORE already exists — reuse."
           else
             echo "Generating signing keystore and storing as repo secret…"
-            keytool -genkeypair -v -keystore keystore.jks -keyalg RSA -keysize 2048 -validity 36500 \
-              -alias "$KEY_ALIAS" -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
+            # 注意：PKCS12 下 JDK 的 keytool 对 -keypass 的处理有坑（私钥实际用 store 密码加密），
+            # 所以统一让 store 密码 == key 密码，后续签名两个参数用同一个值，最稳。
+            keytool -genkeypair -v -keystore keystore.jks -storetype PKCS12 \
+              -keyalg RSA -keysize 2048 -validity 36500 \
+              -alias "$KEY_ALIAS" -storepass "$STORE_PASSWORD" -keypass "$STORE_PASSWORD" \
               -dname "CN=XiYun, OU=XiYun, O=XiYun, L=Changsha, ST=Hunan, C=CN"
             base64 -w0 keystore.jks > keystore.b64
             node scripts/seal-secret.mjs
@@ -112,7 +115,9 @@ jobs:
           set -euo pipefail
           echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > android.keystore
           test -s android.keystore || { echo "SIGNING_KEYSTORE 为空，密钥生成/写入可能失败"; exit 1; }
-          keytool -list -keystore android.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | head -3
+          keytool -list -keystore android.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" > /tmp/ks.txt 2>&1 \
+            || { echo "密钥不可读："; cat /tmp/ks.txt; exit 1; }
+          head -3 /tmp/ks.txt
 
       # 免交互生成 TWA Android 工程（twa/ 目录）
       - name: Generate TWA Android project
@@ -130,18 +135,51 @@ jobs:
         env:
           KS_PASS: ${{ secrets.STORE_PASSWORD }}
           KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
           BT="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
           UNSIGNED="twa/app/build/outputs/apk/release/app-release-unsigned.apk"
           test -f "$UNSIGNED" || { echo "未找到 $UNSIGNED"; ls -R twa/app/build/outputs || true; exit 1; }
           "$BT/zipalign" -p -f 4 "$UNSIGNED" app-release-aligned.apk
-          "$BT/apksigner" sign \
-            --ks android.keystore \
-            --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass env:KS_PASS \
-            --key-pass env:KEY_PASS \
-            --out app-release-signed.apk app-release-aligned.apk
+
+          # 私钥可能用 store 密码或 key 密码加密（取决于密钥是怎么生成的），
+          # 两个候选依次试，谁通用谁。
+          sign_with() {  # $1 = 私钥密码  $2 = 输出文件
+            "$BT/apksigner" sign \
+              --ks android.keystore \
+              --ks-key-alias "$KEY_ALIAS" \
+              --ks-pass "pass:$KS_PASS" \
+              --key-pass "pass:$1" \
+              --out "$2" app-release-aligned.apk
+          }
+
+          SIGNED=""
+          for CAND in "$KEY_PASS" "$KS_PASS"; do
+            rm -f app-release-signed.apk
+            if sign_with "$CAND" app-release-signed.apk 2>/tmp/apksigner.err; then
+              SIGNED=app-release-signed.apk
+              echo "签名成功（私钥密码 = 候选之一）"
+              break
+            fi
+            echo "该候选私钥密码不可用：$(tail -2 /tmp/apksigner.err | tr '\n' ' ')"
+          done
+
+          if [ -z "$SIGNED" ]; then
+            echo "!! 仓库里的签名密钥与当前 Secret 不匹配 → 重新生成密钥并回写 Secret"
+            echo "!! 注意：更换签名密钥后，老用户将无法覆盖升级（本次尚未发布过 APK，影响为零）"
+            keytool -genkeypair -v -keystore keystore.jks -storetype PKCS12 \
+              -keyalg RSA -keysize 2048 -validity 36500 \
+              -alias "$KEY_ALIAS" -storepass "$KS_PASS" -keypass "$KS_PASS" \
+              -dname "CN=XiYun, OU=XiYun, O=XiYun, L=Changsha, ST=Hunan, C=CN"
+            cp keystore.jks android.keystore
+            base64 -w0 keystore.jks > keystore.b64
+            GH_PAT="$GH_PAT" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" SECRET_NAME=SIGNING_KEYSTORE \
+              node scripts/seal-secret.mjs
+            rm -f app-release-signed.apk
+            sign_with "$KS_PASS" app-release-signed.apk
+          fi
+
           echo "--- 验签 ---"
           "$BT/apksigner" verify --verbose --print-certs app-release-signed.apk
           echo "--- 包信息 ---"
