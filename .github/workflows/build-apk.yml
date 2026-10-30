@@ -23,6 +23,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       KEY_ALIAS: xiangshao
     steps:
@@ -35,11 +37,16 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK components + accept licenses
+      # 手动安装 Android SDK（比 android-actions/setup-android 更稳，避免该 Action 偶发失败）。
+      - name: Set up Android SDK (manual)
         run: |
+          ANDROID_HOME=$HOME/android-sdk
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fsSL -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           yes | sdkmanager --licenses
           sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
 
@@ -100,3 +107,15 @@ jobs:
         with:
           name: xiangshao-release-apk
           path: app-release-signed.apk
+
+      # 发布到 GitHub Release，生成「任何人免登录可下载」的稳定链接：
+      # https://github.com/xiyun788-ux/xiangshao-twa/releases/latest/download/app-release-signed.apk
+      - name: Publish APK to GitHub Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-build -y || true
+          gh release create apk-build app-release-signed.apk \
+            --title "英语小花园 APK（自动构建）" \
+            --notes "湘少版三年级英语辅助学习 App 的安卓安装包，使用本仓库自管签名密钥。安装前请允许「未知来源」安装。"
