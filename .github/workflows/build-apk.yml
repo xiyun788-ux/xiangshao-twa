@@ -92,6 +92,10 @@ jobs:
           SECRET_NAME: SIGNING_KEYSTORE
         run: |
           set -euo pipefail
+          if [ -z "${GH_PAT:-}" ]; then
+            echo "仓库已移除 GH_PAT（签名密钥早已生成并保存在 SIGNING_KEYSTORE）→ 跳过自举，直接复用。"
+            exit 0
+          fi
           EXISTING=$(curl -fsSL -H "Authorization: token $GH_PAT" -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/secrets")
           if [[ "$EXISTING" == *"SIGNING_KEYSTORE"* ]]; then
