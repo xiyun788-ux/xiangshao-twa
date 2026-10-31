@@ -15,6 +15,10 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.os.Build;
+import android.webkit.ServiceWorkerClient;
+import android.webkit.ServiceWorkerController;
+import android.webkit.WebResourceResponse;
 
 /**
  * 英语小花园 —— 全屏 WebView 原生壳。
@@ -38,6 +42,29 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // 在 App 壳内禁用站点 PWA 的 Service Worker：
+        // 站点在 PROD 且浏览器支持 SW 时会注册 sw.js 做「离线发音」缓存。但 WebView 内的 SW 缓存
+        // 与线上 Chrome 相互独立，离线下载会把音频/资源写进 WebView 自己的 Cache Storage，偶发
+        // 「下载发音后再次打开白屏」（导航请求被 SW 返回了与当前构建不匹配的缓存）。
+        // 作为已安装的 App，不需要 PWA 的可安装/离线能力，直接让 sw.js 加载失败即可彻底规避。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                ServiceWorkerController.getInstance().setServiceWorkerClient(new ServiceWorkerClient() {
+                    @Override
+                    public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
+                        String u = request.getUrl() != null ? request.getUrl().toString() : "";
+                        if (u.contains("/sw.js")) {
+                            return new WebResourceResponse("application/javascript", "UTF-8",
+                                    404, "Not Found", null, null);
+                        }
+                        return null;
+                    }
+                });
+            } catch (Throwable t) {
+                // 个别 ROM 可能不支持，忽略
+            }
+        }
 
         progressBar = findViewById(R.id.progressBar);
         offlineView = findViewById(R.id.offlineView);
