@@ -1,0 +1,36 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.xiangshao.grade3'
+    compileSdkVersion 36
+    buildToolsVersion '36.1.0'
+
+    defaultConfig {
+        applicationId 'com.xiangshao.grade3'
+        minSdkVersion 24
+        targetSdkVersion 36
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            // 签名放到外部用 apksigner 完成，这里产出未签名包
+            minifyEnabled false
+            shrinkResources false
+            signingConfig null
+        }
+        debug {
+            signingConfig null
+        }
+    }
+}
+
+dependencies {
+    // 纯系统 WebView，不依赖任何 AndroidX / 第三方库
+}

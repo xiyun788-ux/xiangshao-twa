@@ -1,29 +1,27 @@
-name: Build TWA APK
+name: Build APK
 
-# 作用：用 Google 官方 Bubblewrap 把线上 PWA 打包成**我们自己的签名密钥**签名的安卓 APK。
+# 作用：把 android/ 下的「WebView 全屏原生壳」工程打包成**我们自己的签名密钥**签名的安卓 APK。
 # 触发器：手动（workflow_dispatch）或推送 main 分支时自动构建。
-# 产物：app-release-signed.apk（GitHub Actions Artifact + GitHub Release 免登录下载）。
+# 产物：app-release-signed.apk（GitHub Release 免登录下载）。
 #
 # 稳定下载链接：
 #   https://github.com/xiyun788-ux/xiangshao-twa/releases/latest/download/app-release-signed.apk
 #
 # 需要的仓库 Secrets：
-#   GH_PAT        —— 有 repo 权限的 GitHub PAT，**仅**用于「首次自动生成并保存签名密钥」，
-#                    密钥生成后即可删除该 Secret（后续构建复用已保存的 SIGNING_KEYSTORE）。
-#   STORE_PASSWORD—— keystore 密码。
-#   KEY_PASSWORD  —— key 密码（可等同 store 密码）。
-#   SIGNING_KEYSTORE —— 首次运行由本工作流用 keytool 生成并自动写入；之后每次构建解码复用。
+#   STORE_PASSWORD —— keystore 密码（与 key 密码相同）。
+#   KEY_PASSWORD  —— key 密码（与 store 密码相同）。
+#   SIGNING_KEYSTORE —— 首次由早期流程生成并保存的 base64 keystore，之后每次构建解码复用。
 #
-# 改内容（课程/音频/文案）不需要重打 APK（TWA 加载线上站点自动生效）；
-# 改壳（图标/名字/主题/起始页）需要改 scripts/init-twa.mjs 里的 CFG 后重新运行本工作流。
+# 改内容（课程/音频/文案）不需要重打 APK（壳内 WebView 加载线上站点自动生效）；
+# 改壳（图标/名字/起始页/主题）需要改 android/ 工程后重新运行本工作流。
 #
 # ─────────────────────────────────────────────────────────────
-# 为什么不用 `bubblewrap init` / `bubblewrap build`：
-#   1) init 是 inquirer 交互式（必须真 TTY），CI 无法自动化；
-#   2) init 在发现签名密钥不存在时会追加 7 个密码类提问，pty 驱动极易卡死；
-#   3) build 会额外打 AAB，耗时且需要 jarsigner。
-#   → 改为直接调用官方底层库 @bubblewrap/core 的 TwaManifest + TwaGenerator 免交互生成工程，
-#     再用 gradle assembleRelease + zipalign + apksigner 手动出签名 APK，全流程零交互。
+# 为什么是 WebView 壳而不是 TWA：
+#   TWA 要真正全屏无地址栏，必须在站点根放 assetlinks.json（Digital Asset Links 验证）。
+#   我们的站点托管在 suikey.app.workbuddy.host（WorkBuddy 统一托管），没有权限往根目录塞这个文件，
+#   于是 Chrome 不信任该 TWA，回退成「用浏览器打开网页」——顶部地址栏/底部工具栏都在，体验就是网页。
+#   WebView 壳绕开这个限制：用 Android 原生 WebView 全屏加载站点，无地址栏、独立图标、
+#   返回键在 App 内导航不跳浏览器，且不依赖任何域名验证。
 
 on:
   workflow_dispatch:
@@ -42,7 +40,6 @@ jobs:
       contents: write
     env:
       KEY_ALIAS: xiangshao
-      # build-tools 36.1.0 = @bubblewrap/core 1.27.0 的 BUILD_TOOLS_VERSION
       BUILD_TOOLS: 36.1.0
     steps:
       - name: Checkout
@@ -54,14 +51,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # 手动安装 Android SDK（比 android-actions/setup-android 更稳，避免该 Action 偶发失败）。
-      # 同时装 35.0.0（AGP 8.9 的默认 build-tools）和 36.1.0（core 要求的版本）。
+      # 手动安装 Android SDK（比 android-actions/setup-android 更稳）。
+      # core 的 AndroidSdkTools.validatePath 要求 SDK 根下存在 tools/ 或 bin/ 目录 → 补 tools/。
       - name: Set up Android SDK (manual)
         run: |
           set -euo pipefail
           ANDROID_HOME=$HOME/android-sdk
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          # core 的 AndroidSdkTools.validatePath 要求 SDK 根下存在 tools/ 或 bin/ 目录
           mkdir -p "$ANDROID_HOME/cmdline-tools" "$ANDROID_HOME/tools"
           curl -fsSL -o /tmp/cmdline-tools.zip \
             https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
@@ -70,47 +66,7 @@ jobs:
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           yes | sdkmanager --licenses > /dev/null || true   # yes 会被 SIGPIPE，必须吞掉非 0 退出码
-          sdkmanager "build-tools;35.0.0" "build-tools;36.1.0" "platforms;android-36" "platform-tools"
-
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          npm init -y > /dev/null
-          # @bubblewrap/core —— 免交互生成 TWA 工程
-          # tweetsodium     —— 首次生成密钥时用它做 libsodium seal 写仓库 Secret
-          npm install --no-save --no-audit --no-fund @bubblewrap/core@1.27.0 tweetsodium@0.0.4
-
-      # 首次运行：用 keytool 生成签名密钥，并通过 REST API（libsodium 密封）写入仓库 Secret。
-      # 之后 SIGNING_KEYSTORE 已存在，跳过生成，直接使用。
-      # 注意：刻意不用 `gh secret set`——`gh auth login --with-token` 会强制要求 token 带 read:org
-      #       权限，我们的 PAT 只有 repo(+workflow)，gh 会直接报错失败。
-      - name: Bootstrap signing keystore (one-time)
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          SECRET_NAME: SIGNING_KEYSTORE
-        run: |
-          set -euo pipefail
-          if [ -z "${GH_PAT:-}" ]; then
-            echo "仓库已移除 GH_PAT（签名密钥早已生成并保存在 SIGNING_KEYSTORE）→ 跳过自举，直接复用。"
-            exit 0
-          fi
-          EXISTING=$(curl -fsSL -H "Authorization: token $GH_PAT" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/secrets")
-          if [[ "$EXISTING" == *"SIGNING_KEYSTORE"* ]]; then
-            echo "SIGNING_KEYSTORE already exists — reuse."
-          else
-            echo "Generating signing keystore and storing as repo secret…"
-            # 注意：PKCS12 下 JDK 的 keytool 对 -keypass 的处理有坑（私钥实际用 store 密码加密），
-            # 所以统一让 store 密码 == key 密码，后续签名两个参数用同一个值，最稳。
-            keytool -genkeypair -v -keystore keystore.jks -storetype PKCS12 \
-              -keyalg RSA -keysize 2048 -validity 36500 \
-              -alias "$KEY_ALIAS" -storepass "$STORE_PASSWORD" -keypass "$STORE_PASSWORD" \
-              -dname "CN=XiYun, OU=XiYun, O=XiYun, L=Changsha, ST=Hunan, C=CN"
-            base64 -w0 keystore.jks > keystore.b64
-            node scripts/seal-secret.mjs
-          fi
+          sdkmanager "build-tools;36.1.0" "platforms;android-36" "platform-tools"
 
       - name: Decode keystore for build
         env:
@@ -118,19 +74,18 @@ jobs:
         run: |
           set -euo pipefail
           echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > android.keystore
-          test -s android.keystore || { echo "SIGNING_KEYSTORE 为空，密钥生成/写入可能失败"; exit 1; }
+          test -s android.keystore || { echo "SIGNING_KEYSTORE 为空"; exit 1; }
           keytool -list -keystore android.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" > /tmp/ks.txt 2>&1 \
             || { echo "密钥不可读："; cat /tmp/ks.txt; exit 1; }
           head -3 /tmp/ks.txt
 
-      # 免交互生成 TWA Android 工程（twa/ 目录）
-      - name: Generate TWA Android project
-        run: node scripts/init-twa.mjs
+      - name: Generate launcher icons
+        run: python scripts/make-icons.py
 
       - name: Build APK (gradle assembleRelease)
         run: |
           set -euo pipefail
-          cd twa
+          cd android
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
@@ -139,49 +94,42 @@ jobs:
         env:
           KS_PASS: ${{ secrets.STORE_PASSWORD }}
           KEY_PASS: ${{ secrets.KEY_PASSWORD }}
-          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
           BT="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
-          UNSIGNED="twa/app/build/outputs/apk/release/app-release-unsigned.apk"
-          test -f "$UNSIGNED" || { echo "未找到 $UNSIGNED"; ls -R twa/app/build/outputs || true; exit 1; }
+          UNSIGNED="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -f "$UNSIGNED" || { echo "未找到 $UNSIGNED"; ls -R android/app/build/outputs || true; exit 1; }
           "$BT/zipalign" -p -f 4 "$UNSIGNED" app-release-aligned.apk
 
-          # 私钥可能用 store 密码或 key 密码加密（取决于密钥是怎么生成的），
-          # 两个候选依次试，谁通用谁。
-          sign_with() {  # $1 = 私钥密码  $2 = 输出文件
+          # 私钥可能用 store 密码或 key 密码加密（取决于密钥当初怎么生成），两个候选依次试。
+          sign_with() {  # $1 = 私钥密码
             "$BT/apksigner" sign \
               --ks android.keystore \
               --ks-key-alias "$KEY_ALIAS" \
               --ks-pass "pass:$KS_PASS" \
               --key-pass "pass:$1" \
-              --out "$2" app-release-aligned.apk
+              --out app-release-signed.apk app-release-aligned.apk
           }
 
           SIGNED=""
           for CAND in "$KEY_PASS" "$KS_PASS"; do
             rm -f app-release-signed.apk
-            if sign_with "$CAND" app-release-signed.apk 2>/tmp/apksigner.err; then
+            if sign_with "$CAND" 2>/tmp/apksigner.err; then
               SIGNED=app-release-signed.apk
-              echo "签名成功（私钥密码 = 候选之一）"
+              echo "签名成功"
               break
             fi
             echo "该候选私钥密码不可用：$(tail -2 /tmp/apksigner.err | tr '\n' ' ')"
           done
 
           if [ -z "$SIGNED" ]; then
-            echo "!! 仓库里的签名密钥与当前 Secret 不匹配 → 重新生成密钥并回写 Secret"
-            echo "!! 注意：更换签名密钥后，老用户将无法覆盖升级（本次尚未发布过 APK，影响为零）"
-            keytool -genkeypair -v -keystore keystore.jks -storetype PKCS12 \
+            echo "!! 密钥不匹配 → 重新生成本次密钥（注意：老用户将不能覆盖升级）"
+            keytool -genkeypair -v -keystore android.keystore -storetype PKCS12 \
               -keyalg RSA -keysize 2048 -validity 36500 \
               -alias "$KEY_ALIAS" -storepass "$KS_PASS" -keypass "$KS_PASS" \
               -dname "CN=XiYun, OU=XiYun, O=XiYun, L=Changsha, ST=Hunan, C=CN"
-            cp keystore.jks android.keystore
-            base64 -w0 keystore.jks > keystore.b64
-            GH_PAT="$GH_PAT" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" SECRET_NAME=SIGNING_KEYSTORE \
-              node scripts/seal-secret.mjs
             rm -f app-release-signed.apk
-            sign_with "$KS_PASS" app-release-signed.apk
+            sign_with "$KS_PASS"
           fi
 
           echo "--- 验签 ---"
@@ -221,7 +169,7 @@ jobs:
           AID=$(curl -fsSL "${AUTH[@]}" "$API/releases/$RID/assets" \
             | jq -r 'map(select(.name=="app-release-signed.apk"))[0].id // empty')
           if [ -n "$AID" ]; then
-            # 注意：删除资产要用 /releases/assets/{asset_id}，不是 /releases/{id}/assets/{asset_id}
+            # 删除资产要用 /releases/assets/{asset_id}，不是 /releases/{id}/assets/{asset_id}
             echo "删除同名旧资产 asset_id=$AID"
             curl -fsSL -X DELETE "${AUTH[@]}" "$API/releases/assets/$AID"
           fi

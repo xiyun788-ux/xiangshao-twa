@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 全屏无标题栏：状态栏保留（显示时间/电量，像普通 App），但绝无地址栏/浏览器工具栏 -->
+    <style name="Theme.XiangshaoFullscreen" parent="@android:style/Theme.NoTitleBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">false</item>
+    </style>
+</resources>
