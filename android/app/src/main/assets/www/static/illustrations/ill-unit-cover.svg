@@ -1,0 +1,11 @@
+<!-- 用途：单元封面（一格被点亮 + 三条声波） ｜ 使用页面：P-04 /units ｜ 视框 240×180 ｜ 语法见 assets/illustrations/README.md -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="240" height="180" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true">
+  <rect x="48" y="36" width="48" height="48" rx="8" stroke="var(--ill-ink, currentColor)" stroke-width="3"/>
+  <rect x="104" y="36" width="48" height="48" rx="8" stroke="var(--ill-ink, currentColor)" stroke-width="3"/>
+  <rect x="48" y="92" width="48" height="48" rx="8" stroke="var(--ill-ink, currentColor)" stroke-width="3"/>
+  <rect x="104" y="92" width="48" height="48" rx="8" fill="var(--ill-tint, #CFF2F7)"/>
+  <path transform="translate(128 116)" d="M0 -12 Q2.4 -2.4 12 0 Q2.4 2.4 0 12 Q-2.4 2.4 -12 0 Q-2.4 -2.4 0 -12Z" fill="var(--ill-a1, #0A6F80)"/>
+  <rect x="176" y="48" width="6" height="24" rx="3" fill="var(--ill-neutral, #C9CDD0)"/>
+  <rect x="188" y="40" width="6" height="40" rx="3" fill="var(--ill-neutral, #C9CDD0)"/>
+  <rect x="200" y="32" width="6" height="56" rx="3" fill="var(--ill-a1, #0A6F80)"/>
+</svg>

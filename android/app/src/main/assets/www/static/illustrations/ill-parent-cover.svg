@@ -1,0 +1,13 @@
+<!-- 用途：家长端报告封面（单色线稿 · 结论行在上 · 7 根柱在下） ｜ 使用页面：P-10 /parent ｜ 视框 240×120 ｜ 语法见 assets/illustrations/README.md -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" width="240" height="120" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true">
+  <path d="M36 28 L120 28" stroke="var(--ill-ink, currentColor)" stroke-width="3"/>
+  <path d="M36 40 L96 40" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+  <rect x="36" y="80" width="10" height="16" rx="4" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+  <rect x="60" y="68" width="10" height="28" rx="4" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+  <rect x="84" y="76" width="10" height="20" rx="4" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+  <rect x="108" y="60" width="10" height="36" rx="4" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+  <rect x="132" y="72" width="10" height="24" rx="4" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+  <rect x="156" y="52" width="10" height="44" rx="4" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+  <rect x="180" y="64" width="10" height="32" rx="4" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+  <path d="M28 96 L200 96" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+</svg>

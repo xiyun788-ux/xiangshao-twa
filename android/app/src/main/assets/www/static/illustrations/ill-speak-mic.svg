@@ -1,0 +1,12 @@
+<!-- 用途：跟读空态（麦克风 + 待录点阵「这里会响」） ｜ 使用页面：P-08 /speak ｜ 视框 240×180 ｜ 语法见 assets/illustrations/README.md -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="240" height="180" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true">
+  <rect x="96" y="32" width="32" height="56" rx="16" stroke="var(--ill-ink, currentColor)" stroke-width="3"/>
+  <path d="M84 78 A28 28 0 0 0 140 78" stroke="var(--ill-ink, currentColor)" stroke-width="3"/>
+  <path d="M112 106 L112 116" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+  <path d="M96 120 L128 120" stroke="var(--ill-ink, currentColor)" stroke-width="2"/>
+  <circle cx="88" cy="140" r="5" fill="var(--ill-neutral, #C9CDD0)"/>
+  <circle cx="100" cy="140" r="5" fill="var(--ill-neutral, #C9CDD0)"/>
+  <circle cx="112" cy="140" r="5" fill="var(--ill-a1, #0A6F80)"/>
+  <circle cx="124" cy="140" r="5" fill="var(--ill-neutral, #C9CDD0)"/>
+  <circle cx="136" cy="140" r="5" fill="var(--ill-neutral, #C9CDD0)"/>
+</svg>

@@ -1,0 +1,4 @@
+<!-- 用途：单元（Unit 3） ｜ 手册 §5.1 §7 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M6.5 4.5h3.6a1 1 0 0 1 1 1v3.6a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1V5.5a1 1 0 0 1 1-1zM13.9 4.5h3.6a1 1 0 0 1 1 1v3.6a1 1 0 0 1-1 1h-3.6a1 1 0 0 1-1-1V5.5a1 1 0 0 1 1-1zM6.5 13.9h3.6a1 1 0 0 1 1 1v3.6a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1v-3.6a1 1 0 0 1 1-1zM13.9 13.9h3.6a1 1 0 0 1 1 1v3.6a1 1 0 0 1-1 1h-3.6a1 1 0 0 1-1-1v-3.6a1 1 0 0 1 1-1z"/>
+</svg>

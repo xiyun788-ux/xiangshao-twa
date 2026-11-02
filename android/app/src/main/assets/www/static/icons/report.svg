@@ -1,0 +1,4 @@
+<!-- 用途：家长端报告卡（结论 + 数字块） ｜ 手册 §5.1 §7 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M6.5 3.5h11A1.5 1.5 0 0 1 19 5v14a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5zM8.8 16.5v-3M12 16.5v-5.2M15.2 16.5v-2"/>
+</svg>

@@ -16,6 +16,7 @@ import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.os.Build;
+import android.util.Log;
 import android.webkit.ServiceWorkerClient;
 import android.webkit.ServiceWorkerController;
 import android.webkit.WebResourceResponse;
@@ -31,12 +32,13 @@ import android.webkit.WebResourceResponse;
  */
 public class MainActivity extends Activity {
 
-    private static final String START_URL =
-            "https://suike.app.workbuddy.host/?sharecode=24NRJSLYLH";
+    // 本地内嵌服务器的访问地址（整站 + 离线发音已打包进 APK，彻底离线，不连任何远端）。
+    private static final String LOCAL_BASE_URL = "http://127.0.0.1:8080/";
 
     private WebView webView;
     private ProgressBar progressBar;
     private View offlineView;
+    private LocalServer localServer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -135,21 +137,39 @@ public class MainActivity extends Activity {
             webView.reload();
         });
 
-        if (savedInstanceState == null) {
-            webView.loadUrl(START_URL);
+        // 每次冷启动清空 WebView 缓存：本地服务器对 html 返回 no-cache、静态资源 immutable，
+        // 清空缓存可彻底避免WebView残留旧构建导致的 chunk 404（白屏）。
+        try {
+            webView.clearCache(true);
+        } catch (Throwable t) {
+            // 个别 ROM / 低版本不支持，忽略
         }
-    }
 
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        webView.saveState(outState);
-    }
-
-    @Override
-    protected void onRestoreInstanceState(Bundle savedInstanceState) {
-        super.onRestoreInstanceState(savedInstanceState);
-        webView.restoreState(savedInstanceState);
+        // 启动本地内嵌服务器（首启动需把 assets/www 解压到私有目录，可能耗时 1~3s），
+        // 放后台线程避免阻塞 onCreate 触发 ANR；服务器就绪后在主线程 loadUrl。
+        // 端口绑定后即意味着本地 HTTP 服务可用，WebView 加载 http://127.0.0.1:8080/ 不会连远端，
+        // 因此即便无网也能完整离线运行（整站 + 512 个离线发音 mp3 均已内嵌）。
+        localServer = new LocalServer(this);
+        new Thread(() -> {
+            try {
+                localServer.start();
+                runOnUiThread(() -> {
+                    if (!isFinishing() && webView != null) {
+                        webView.loadUrl(LOCAL_BASE_URL);
+                    }
+                });
+            } catch (Throwable t) {
+                Log.e("MainActivity", "local server start failed", t);
+                runOnUiThread(() -> {
+                    if (!isFinishing() && progressBar != null) {
+                        progressBar.setVisibility(View.GONE);
+                    }
+                    if (!isFinishing() && offlineView != null) {
+                        offlineView.setVisibility(View.VISIBLE);
+                    }
+                });
+            }
+        }, "LocalServer-Thread").start();
     }
 
     /**
@@ -166,6 +186,9 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (localServer != null) {
+            localServer.stop();
+        }
         if (webView != null) {
             webView.destroy();
         }

@@ -1,0 +1,1 @@
+import{X as t,r as e,Y as o,Z as s}from"./index-D6oVjVq9.js";const c=t("settings",()=>{const t=e("girl");try{const e=o("voiceMode");"girl"!==e&&"tts"!==e||(t.value=e)}catch(c){}return{voiceMode:t,setVoiceMode:function(e){t.value=e;try{s("voiceMode",e)}catch(c){}}}});export{c as u};

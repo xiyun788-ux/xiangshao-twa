@@ -1,0 +1,4 @@
+<!-- 用途：日历打卡（近 7 天） ｜ 手册 §5.1 §7 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M6.5 6h11A2 2 0 0 1 19.5 8v9.5a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM4.5 10.5h15M8 3.6v3M16 3.6v3"/>
+</svg>

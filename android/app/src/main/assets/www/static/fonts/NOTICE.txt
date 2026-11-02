@@ -1,0 +1,26 @@
+随课 / SUIKE — 字体署名与修改说明
+================================================================
+
+本目录四个 woff2 与 OFL.txt，全部按 SIL Open Font License 1.1 分发。
+许可全文见同目录 OFL.txt（亦已写入每个字体文件的 name 表）。
+
+1) suike-text-regular-400.woff2
+   字形来源：Andika Regular
+   Copyright (c) 2004-2022 SIL International (http://www.sil.org/)
+   with Reserved Font Names "Andika" and "SIL".
+   ★ 本文件是修改版（Modified Version）：
+     · 从 Andika 完整字体裁出子集（拉丁基本 / 拉丁-1 / 拉丁扩展-A /
+       希腊 / 通用标点 / IPA 扩展 / 修饰字母），去 hinting；
+     · 因 OFL 保留字体名条款，**内部 family 名已由 "Andika" 改为 "Suike Text"**，
+       未获得 SIL 的书面许可，不得再以 "Andika" 或 "SIL" 作为字体名称分发本文件；
+     · 版权声明与许可全文完整保留（name 表 0 / 13 / 14）。
+   使用范围：仅用于「随课」产品界面，不作为字体产品对外提供。
+
+2) inter-regular-400.woff2 / inter-medium-500.woff2 / inter-bold-700.woff2
+   Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
+   Inter 的 OFL 声明中**没有**保留字体名，故内部名称保持 "Inter"，未作改动。
+   三个文件取自 @fontsource/inter@5 的 latin 子集，未作字形修改；
+   仅补写了 name 表中缺失的许可全文（nameID 13）。
+
+如需把上述任何文件作为字体资源对外分发，请先由法务复核 OFL 条款。
+（本文件为工程与设计侧的说明，不构成法律意见。）

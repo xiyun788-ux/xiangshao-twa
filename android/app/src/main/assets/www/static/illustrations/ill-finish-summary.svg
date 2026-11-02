@@ -1,0 +1,10 @@
+<!-- 用途：完成 / 结算（今天真做了什么，不庆祝） ｜ 使用页面：P-07 /summary ｜ 视框 240×180 ｜ 语法见 assets/illustrations/README.md -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="240" height="180" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true">
+  <rect x="40" y="28" width="136" height="96" rx="8" stroke="var(--ill-ink, currentColor)" stroke-width="3"/>
+  <circle cx="76" cy="64" r="20" fill="var(--ill-tint, #CFF2F7)"/>
+  <path d="M66 64 L74 73 L88 56" stroke="var(--ill-a1, #0A6F80)" stroke-width="3"/>
+  <rect x="112" y="88" width="10" height="20" rx="5" fill="var(--ill-neutral, #C9CDD0)"/>
+  <rect x="130" y="74" width="10" height="34" rx="5" fill="var(--ill-tint, #CFF2F7)"/>
+  <rect x="148" y="60" width="10" height="48" rx="5" fill="var(--ill-a1, #0A6F80)"/>
+  <path transform="translate(204 44)" d="M0 -12 Q2.4 -2.4 12 0 Q2.4 2.4 0 12 Q-2.4 2.4 -12 0 Q-2.4 -2.4 0 -12Z" fill="var(--ill-a2, #6B4BC9)"/>
+</svg>

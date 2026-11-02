@@ -1,0 +1,11 @@
+<!-- 用途：首页空态（今日未开始 / 零状态清单） ｜ 使用页面：P-03 /home ｜ 视框 240×180 ｜ 语法见 assets/illustrations/README.md -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="240" height="180" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true">
+  <rect x="44" y="32" width="140" height="104" rx="8" stroke="var(--ill-ink, currentColor)" stroke-width="3"/>
+  <circle cx="68" cy="60" r="6" fill="var(--ill-tint, #CFF2F7)"/>
+  <rect x="88" y="56" width="80" height="8" rx="4" fill="var(--ill-neutral, #C9CDD0)"/>
+  <circle cx="68" cy="84" r="6" fill="var(--ill-tint, #CFF2F7)"/>
+  <rect x="88" y="80" width="80" height="8" rx="4" fill="var(--ill-neutral, #C9CDD0)"/>
+  <circle cx="68" cy="108" r="6" fill="var(--ill-tint, #CFF2F7)"/>
+  <rect x="88" y="104" width="56" height="8" rx="4" fill="var(--ill-neutral, #C9CDD0)"/>
+  <path transform="translate(200 36)" d="M0 -10 Q2 -2 10 0 Q2 2 0 10 Q-2 2 -10 0 Q-2 -2 0 -10Z" fill="var(--ill-a2, #6B4BC9)"/>
+</svg>

@@ -1,0 +1,4 @@
+<!-- 用途：删除（账号注销 / 清空记录） ｜ 手册 §5.1 §7 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M4.5 7h15M9.5 7V4.6h5V7M6.6 7l.9 12.2a1.6 1.6 0 0 0 1.6 1.5h5.8a1.6 1.6 0 0 0 1.6-1.5L17.4 7M10.2 11.2v5.6M13.8 11.2v5.6"/>
+</svg>

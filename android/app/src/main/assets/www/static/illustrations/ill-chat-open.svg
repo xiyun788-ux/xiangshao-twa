@@ -1,0 +1,11 @@
+<!-- 用途：AI 对话空态（AI 侧三条声波，学生侧文字行；不设头像、不画角色） ｜ 使用页面：P-09 /chat ｜ 视框 240×180 ｜ 语法见 assets/illustrations/README.md -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="240" height="180" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true">
+  <rect x="36" y="48" width="104" height="52" rx="16" fill="var(--ill-tint, #CFF2F7)"/>
+  <rect x="60" y="68" width="4" height="12" rx="2" fill="var(--ill-a1, #0A6F80)"/>
+  <rect x="72" y="64" width="4" height="20" rx="2" fill="var(--ill-a1, #0A6F80)"/>
+  <rect x="84" y="66" width="4" height="16" rx="2" fill="var(--ill-a1, #0A6F80)"/>
+  <rect x="124" y="104" width="88" height="44" rx="16" stroke="var(--ill-ink, currentColor)" stroke-width="3"/>
+  <path d="M144 120 L192 120" stroke="var(--ill-neutral, #C9CDD0)" stroke-width="2"/>
+  <path d="M144 132 L172 132" stroke="var(--ill-neutral, #C9CDD0)" stroke-width="2"/>
+  <path transform="translate(200 60)" d="M0 -10 Q2 -2 10 0 Q2 2 0 10 Q-2 2 -10 0 Q-2 -2 0 -10Z" fill="var(--ill-a2, #6B4BC9)"/>
+</svg>

@@ -1,0 +1,4 @@
+<!-- 用途：家长端「只读」常驻标识 ｜ 手册 §5.1 §7 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M7 10.4h10a1.5 1.5 0 0 1 1.5 1.5v7.1a1.5 1.5 0 0 1-1.5 1.5H7a1.5 1.5 0 0 1-1.5-1.5v-7.1A1.5 1.5 0 0 1 7 10.4zM8.6 10.4V7.6a3.4 3.4 0 0 1 6.8 0v2.8"/>
+</svg>

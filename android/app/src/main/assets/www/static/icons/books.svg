@@ -1,0 +1,4 @@
+<!-- 用途：册次（PEP 上册 / 下册，两本叠放） ｜ 手册 §5.1 §7 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M6.2 9h7.3A1.5 1.5 0 0 1 15 10.5v8.5a1.5 1.5 0 0 1-1.5 1.5H6.2A1.5 1.5 0 0 1 4.7 19v-8.5A1.5 1.5 0 0 1 6.2 9zM8.6 9V6.6A1.6 1.6 0 0 1 10.2 5h7.4a1.6 1.6 0 0 1 1.6 1.6v10.2a1.6 1.6 0 0 1-1.6 1.6h-2.6"/>
+</svg>
