@@ -30,19 +30,31 @@
         android:padding="32dp">
 
         <TextView
+            android:id="@+id/offlineTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="网络好像断开了"
+            android:text="本地服务未能启动"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="#333333" />
 
         <TextView
+            android:id="@+id/offlineMsg"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="请检查网络后点击重试"
+            android:text="请点击重试；若仍失败，请把下面这行红字截图发我。"
             android:textSize="15sp"
             android:textColor="#888888" />
+
+        <TextView
+            android:id="@+id/offlineDetail"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text=""
+            android:textSize="13sp"
+            android:textColor="#D32F2F"
+            android:maxWidth="300dp" />
     </LinearLayout>
 </FrameLayout>

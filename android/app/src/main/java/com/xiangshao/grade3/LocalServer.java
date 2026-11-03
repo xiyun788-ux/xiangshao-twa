@@ -94,11 +94,12 @@ public class LocalServer {
 
     // ───────────────────────── 解压：assets/www → 私有目录 ─────────────────────────
 
-    private void ensureExtracted() {
+    private void ensureExtracted() throws IOException {
         long stamp = getApkUpdateTime();
         File stampFile = new File(wwwDir, ".stamp");
         if (wwwDir.isDirectory() && wwwDir.list().length > 0 && readStamp(stampFile) == stamp) {
             Log.i(TAG, "www already extracted (stamp matches), skip");
+            verifyCriticalFiles();
             return;
         }
         Log.i(TAG, "extracting www from assets (stamp=" + stamp + ") …");
@@ -108,8 +109,17 @@ public class LocalServer {
             copyAssetDir(context.getAssets(), ASSET_ROOT, wwwDir);
         } catch (IOException e) {
             Log.e(TAG, "extract failed", e);
+            throw new IOException("解压整站失败：" + e.getMessage(), e);
         }
+        verifyCriticalFiles();
         writeStamp(stampFile, stamp);
+        Log.i(TAG, "extraction complete");
+    }
+
+    private void verifyCriticalFiles() throws IOException {
+        if (!new File(wwwDir, "index.html").exists()) {
+            throw new IOException("解压后找不到 index.html（整站可能不完整）");
+        }
     }
 
     private long getApkUpdateTime() {
@@ -150,12 +160,16 @@ public class LocalServer {
         for (String name : list) {
             File child = new File(outDir, name);
             String childAsset = assetPath + "/" + name;
-            String[] sub = am.list(childAsset);
-            if (sub != null && sub.length > 0) {
-                child.mkdirs();
-                copyAssetDir(am, childAsset, child);
-            } else {
-                copyAssetFile(am, childAsset, outDir);
+            try {
+                String[] sub = am.list(childAsset);
+                if (sub != null && sub.length > 0) {
+                    child.mkdirs();
+                    copyAssetDir(am, childAsset, child);
+                } else {
+                    copyAssetFile(am, childAsset, outDir);
+                }
+            } catch (IOException e) {
+                Log.e(TAG, "copy failed: " + childAsset, e);
             }
         }
     }
@@ -309,6 +323,7 @@ public class LocalServer {
             headers.append("Content-Length: ").append(total).append("\r\n");
         }
         headers.append("Content-Type: ").append(mime).append("\r\n");
+        headers.append("Access-Control-Allow-Origin: *\r\n");
         headers.append("Accept-Ranges: bytes\r\n");
         if (name.endsWith(".html") || name.endsWith(".webmanifest")) {
             headers.append("Cache-Control: no-cache\r\n");

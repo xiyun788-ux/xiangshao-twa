@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  仅允许向 127.0.0.1 / localhost 发起明文（http）请求。
-  本 App 的 WebView 通过 http://127.0.0.1:8080/ 加载本地内嵌服务器，
-  因此需要为 localhost 放行明文；其余域名仍走默认策略（禁止明文）。
+  本 App 完全离线：WebView 只通过 http://127.0.0.1:8080/ 加载应用自己内嵌的本地服务器，
+  不连任何外部域名。因此允许明文（http）是安全的，且对 127.0.0.1 必须放行，否则 WebView
+  会拒绝连本地服务器、直接报 ERR_CLEARTEXT_NOT_PERMITTED → 整页白屏（offlineView）。
+
+  早期版本只在 domain-config 里针对 127.0.0.1 放行，但部分国产 ROM 不认「IP 形式」的
+  domain 规则，导致本地服务连不上。这里改用 base-config 全局放行明文，跨设备最稳妥。
+  应用本身不发起任何远程请求，故无隐私风险。
 -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">127.0.0.1</domain>
-        <domain includeSubdomains="false">localhost</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
 </network-security-config>

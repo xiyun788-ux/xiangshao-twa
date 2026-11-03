@@ -38,6 +38,7 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ProgressBar progressBar;
     private View offlineView;
+    private TextView offlineDetail;
     private LocalServer localServer;
 
     @Override
@@ -70,6 +71,7 @@ public class MainActivity extends Activity {
 
         progressBar = findViewById(R.id.progressBar);
         offlineView = findViewById(R.id.offlineView);
+        offlineDetail = findViewById(R.id.offlineDetail);
         webView = findViewById(R.id.webView);
 
         // 让 WebView 与站点的会话 Cookie 持久化，首次带 sharecode 加载即建立登录态
@@ -113,8 +115,17 @@ public class MainActivity extends Activity {
             public void onReceivedError(WebView view, WebResourceRequest request,
                                        WebResourceError error) {
                 if (request != null && request.isForMainFrame()) {
-                    progressBar.setVisibility(View.GONE);
-                    offlineView.setVisibility(View.VISIBLE);
+                    String desc = (error != null) ? error.getDescription().toString() : "未知错误";
+                    showOffline("页面加载失败：" + desc);
+                }
+            }
+
+            // 兼容部分旧版 WebView 实现：它们仍走这个已废弃的重载
+            @Deprecated
+            @Override
+            public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                if (view != null && view.getUrl() != null && view.getUrl().equals(failingUrl)) {
+                    showOffline("页面加载失败(code=" + errorCode + ")：" + description);
                 }
             }
         });
@@ -160,16 +171,19 @@ public class MainActivity extends Activity {
                 });
             } catch (Throwable t) {
                 Log.e("MainActivity", "local server start failed", t);
-                runOnUiThread(() -> {
-                    if (!isFinishing() && progressBar != null) {
-                        progressBar.setVisibility(View.GONE);
-                    }
-                    if (!isFinishing() && offlineView != null) {
-                        offlineView.setVisibility(View.VISIBLE);
-                    }
-                });
+                runOnUiThread(() -> showOffline("本地服务器启动失败：" + t.getMessage()));
             }
         }, "LocalServer-Thread").start();
+    }
+
+    /**
+     * 展示离线/失败提示，并把具体错误写进 offlineDetail，方便排查（如 ERR_CLEARTEXT_NOT_PERMITTED）。
+     */
+    private void showOffline(String detail) {
+        if (isFinishing()) return;
+        if (progressBar != null) progressBar.setVisibility(View.GONE);
+        if (offlineDetail != null) offlineDetail.setText(detail != null ? detail : "");
+        if (offlineView != null) offlineView.setVisibility(View.VISIBLE);
     }
 
     /**
