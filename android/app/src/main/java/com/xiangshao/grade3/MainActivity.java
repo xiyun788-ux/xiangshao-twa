@@ -2,7 +2,6 @@ package com.xiangshao.grade3;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.View;
@@ -24,33 +23,39 @@ import android.webkit.WebResourceResponse;
 /**
  * 英语小花园 —— 全屏 WebView 原生壳。
  *
- * 设计目标（解决 TWA 回退成"浏览器打开网页"的痛点）：
- *  1. 真正的全屏无地址栏、无浏览器工具栏；
- *  2. 独立应用图标，从桌面启动，返回键在 App 内历史栈导航，空了才退出回桌面，绝不跳浏览器；
- *  3. 不依赖 Digital Asset Links / 自有域名，零外部前提；
+ * 加载方式（v1.2.0 起，重大重构）：
+ *   用 file:///android_asset/www/index.html 直接加载 App 内嵌的「单文件整站」。
+ *   · 整站（index.html）在构建期由 vite-plugin-singlefile 把 JS/CSS 全内联进一个文件；
+ *   · 音频 / 字体 / 图标 / 插画作为同目录的 static/ 兄弟资源随包发布；
+ *   · 资源 URL 在运行期拼成「文档根绝对地址」（file:///android_asset/www/static/...），
+ *     既绕过 uni-app 把相对 src 当成页面相对而前缀路由目录的坑，又能在 file:// 下正确加载。
+ *
+ * 相比早期「本地 HTTP 服务器（127.0.0.1:8080）」方案的优势：
+ *   · 无服务器进程、无端口、无明文、无 AssetManager 解压、无 OEM 明文策略差异；
+ *   · 不依赖「国产 ROM 是否放行 127.0.0.1 明文」这类设备相关行为 → 跨机型稳定；
+ *   · 本机即可用无头浏览器以 file:// 真实渲染验证，杜绝「只解包看字符串」式假验证。
+ *
+ * 设计目标（不变）：
+ *  1. 真正全屏无地址栏；2. 独立图标、返回键在 App 内导航；3. 不依赖域名验证；
  *  4. 自动隐藏站点里的"装到手机桌面"提示条（已是 App，不需要它）。
  */
 public class MainActivity extends Activity {
 
-    // 本地内嵌服务器的访问地址（整站 + 离线发音已打包进 APK，彻底离线，不连任何远端）。
-    private static final String LOCAL_BASE_URL = "http://127.0.0.1:8080/";
+    // APK 内整站以 file:// 直载（单文件 index.html + 同目录 static/）。
+    private static final String FILE_URL = "file:///android_asset/www/index.html";
 
     private WebView webView;
     private ProgressBar progressBar;
     private View offlineView;
     private TextView offlineDetail;
-    private LocalServer localServer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // 在 App 壳内禁用站点 PWA 的 Service Worker：
-        // 站点在 PROD 且浏览器支持 SW 时会注册 sw.js 做「离线发音」缓存。但 WebView 内的 SW 缓存
-        // 与线上 Chrome 相互独立，离线下载会把音频/资源写进 WebView 自己的 Cache Storage，偶发
-        // 「下载发音后再次打开白屏」（导航请求被 SW 返回了与当前构建不匹配的缓存）。
-        // 作为已安装的 App，不需要 PWA 的可安装/离线能力，直接让 sw.js 加载失败即可彻底规避。
+        // 禁用站点 PWA 的 Service Worker：站点在 PROD 会注册 sw.js 做离线缓存，但 App 内已用 file:// 直载，
+        // 不需要 SW；且 SW 缓存曾在 WebView 内偶发「下载发音后再次打开白屏」。这里让 sw.js 直接 404 规避。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             try {
                 ServiceWorkerController.getInstance().setServiceWorkerClient(new ServiceWorkerClient() {
@@ -74,7 +79,7 @@ public class MainActivity extends Activity {
         offlineDetail = findViewById(R.id.offlineDetail);
         webView = findViewById(R.id.webView);
 
-        // 让 WebView 与站点的会话 Cookie 持久化，首次带 sharecode 加载即建立登录态
+        // 让 WebView 与站点的会话 Cookie 持久化（站点无 sharecode 时本就不需要，但保留无副作用）。
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
@@ -84,10 +89,11 @@ public class MainActivity extends Activity {
         ws.setDomStorageEnabled(true);
         ws.setDatabaseEnabled(true);
         ws.setCacheMode(WebSettings.LOAD_DEFAULT);
-        ws.setAllowFileAccess(false);
+        // file:///android_asset/ 直载必须允许文件访问（android_asset 为 App 私有资源，开启无安全风险）。
+        ws.setAllowFileAccess(true);
         ws.setAllowContentAccess(false);
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        // 追加自定义 UA，便于站点识别"已在 App 内"并隐藏桌面安装提示
+        // 追加自定义 UA，便于站点识别"已在 App 内"并隐藏桌面安装提示。
         ws.setUserAgentString(ws.getUserAgentString() + " XiangshaoApp/1.0");
 
         webView.setWebViewClient(new WebViewClient() {
@@ -101,7 +107,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 progressBar.setVisibility(View.GONE);
-                // 隐藏站点"装到手机桌面"提示条（按文字内容定位，不依赖具体选择器）
+                // 隐藏站点"装到手机桌面"提示条（按文字内容定位，不依赖具体选择器）。
                 view.evaluateJavascript(
                         "(function(){try{var els=document.querySelectorAll('*');"
                                 + "for(var i=0;i<els.length;i++){"
@@ -120,7 +126,7 @@ public class MainActivity extends Activity {
                 }
             }
 
-            // 兼容部分旧版 WebView 实现：它们仍走这个已废弃的重载
+            // 兼容部分旧版 WebView 实现：它们仍走这个已废弃的重载。
             @Deprecated
             @Override
             public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
@@ -142,42 +148,18 @@ public class MainActivity extends Activity {
             }
         });
 
-        // 点击离线提示的"重试"重新加载
+        // 点击离线提示的"重试"重新加载。
         offlineView.setOnClickListener(v -> {
             offlineView.setVisibility(View.GONE);
             webView.reload();
         });
 
-        // 每次冷启动清空 WebView 缓存：本地服务器对 html 返回 no-cache、静态资源 immutable，
-        // 清空缓存可彻底避免WebView残留旧构建导致的 chunk 404（白屏）。
-        try {
-            webView.clearCache(true);
-        } catch (Throwable t) {
-            // 个别 ROM / 低版本不支持，忽略
-        }
-
-        // 启动本地内嵌服务器（首启动需把 assets/www 解压到私有目录，可能耗时 1~3s），
-        // 放后台线程避免阻塞 onCreate 触发 ANR；服务器就绪后在主线程 loadUrl。
-        // 端口绑定后即意味着本地 HTTP 服务可用，WebView 加载 http://127.0.0.1:8080/ 不会连远端，
-        // 因此即便无网也能完整离线运行（整站 + 512 个离线发音 mp3 均已内嵌）。
-        localServer = new LocalServer(this);
-        new Thread(() -> {
-            try {
-                localServer.start();
-                runOnUiThread(() -> {
-                    if (!isFinishing() && webView != null) {
-                        webView.loadUrl(LOCAL_BASE_URL);
-                    }
-                });
-            } catch (Throwable t) {
-                Log.e("MainActivity", "local server start failed", t);
-                runOnUiThread(() -> showOffline("本地服务器启动失败：" + t.getMessage()));
-            }
-        }, "LocalServer-Thread").start();
+        // file:// 直载：整站随包发布、无版本错位，直接加载即可（无需清空缓存）。
+        webView.loadUrl(FILE_URL);
     }
 
     /**
-     * 展示离线/失败提示，并把具体错误写进 offlineDetail，方便排查（如 ERR_CLEARTEXT_NOT_PERMITTED）。
+     * 展示离线/失败提示，并把具体错误写进 offlineDetail，方便排查（如资源缺失导致的 ERR_FILE_NOT_FOUND）。
      */
     private void showOffline(String detail) {
         if (isFinishing()) return;
@@ -200,9 +182,6 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (localServer != null) {
-            localServer.stop();
-        }
         if (webView != null) {
             webView.destroy();
         }
