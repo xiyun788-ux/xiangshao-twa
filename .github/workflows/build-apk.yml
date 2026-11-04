@@ -16,19 +16,35 @@ name: Build APK
 #   本 APK 为「file:// 单文件离线自包含」版本：整站（含 512 个离线发音 mp3）已打包进
 #   android/app/src/main/assets/www/，MainActivity 直接
 #   webView.loadUrl("file:///android_asset/www/index.html")。
-#   · index.html 由 vite-plugin-singlefile 把 JS/CSS 全内联，避免 file:// origin=null
-#     下外链 module script 被 CORS 拦截而白屏；
-#   · static/ 下的音频/字体/图标/插画由 config/path.ts 拼成「文档根绝对地址」加载；
-#   · 无服务器、无端口、无明文、无远程站点，运行时不发起任何 http(s) 请求。
+#   · index.html 由 vite-plugin-singlefile 把 JS/CSS 全内联。真机 WebView 默认不开放
+#     file→file 跨源 module/CORS，外链 <script type=module> 会被拦 → 白屏。
+#     注意：带 --allow-file-access-from-files 的桌面 Chrome 拆成外链 module 仍能挂载，
+#     所以「桌面能开」不等于「真机能开」，桌面验证不能替代真机。
+#   · static/ 下的音频/字体/图标/插画由 config/path.ts 拼成「文档根绝对地址」加载。
+#   · 无服务器、无端口、无明文。页面与全部静态资源随包离线，运行期零 http(s) 请求：
+#     uni-app 框架内置的两条 CDN 阴影图（导航栏 ::after、body:after 的 3 秒延迟预加载）
+#     已在 src/styles/tokens.css 全局置空；账号云同步是**可选在线功能**，
+#     APK 内 src/services/cloud.ts 显式降级为 null，不发起请求、不报错。
 #
-#   ⚠️ 改前端后必须按下面的顺序重打 APK，否则「源码改了、APK 里还是旧页」会继续复发：
-#     1. cd xiangshao && npm run build:h5        ← 必须是 h5 平台，singlefile 才生效
+# ── 前端源码不在本仓库（重要，历次「改了没生效」的复发源）──
+#   本仓库根 = apk-build/，只含 .github / android / icons / scripts。
+#   前端工程 xiangshao/ 在另一个目录，CI **不会**重新构建前端，只会把本仓库里
+#   android/app/src/main/assets/www/ 的现有产物打进 APK。
+#   因此「只改前端源码就 push」= CI 打包旧页面。提交前必须在本机按顺序完成，
+#   这几步 CI 无法代替（verify_apk_payload.mjs 依赖本机 Chrome，ubuntu runner 没有）：
+#     1. cd xiangshao && npm run build:h5      ← 必须 h5 平台，singlefile 才生效
 #     2. 删除 dist/build/h5/ 里遗留的 _verify_*.png 截图（绝不能拷进 APK）
 #     3. 把 dist/build/h5/ 整站同步覆盖到 android/app/src/main/assets/www/
-#     4. 运行 `node xiangshao/verify_apk_payload.mjs` 做 file:// 真实渲染冒烟
-#        （内含「单文件化」与「fetch 清单可用」断言），PASS 后再推送
-#     5. build.gradle 的 versionCode 必须递增，否则用户无法覆盖升级
-#   → 改壳（图标/名字/起始页/主题/WebSettings）同样需要改 android/ 工程后重跑本工作流。
+#     4. node xiangshao/verify_apk_payload.mjs   ← 全套 file:// 真实渲染断言：
+#        单文件化 / 全 10 路由非白屏 / 静态资源 / fetch 清单 512 条 / 无 SW / mp3 /
+#        **Java 注入 JS 逐字重放**（P0 防复发）/ 图标守门 / **5 秒延迟外链观察** /
+#        0 console error / 0 失败请求
+#     5. node xiangshao/verify_native_inject.mjs ← 原生注入专项（多路由 + DOM 写操作禁令）
+#     6. node xiangshao/verify_file_render.mjs && node xiangshao/verify_audio.mjs
+#     7. build.gradle 的 versionCode 必须递增，否则已装用户无法覆盖升级
+#   上方 "Guard APK payload" step 会静态守住仓库内产物的结构性不变量
+#   （注入 JS 纯只读 / 单文件化 / 图标 26 / 音频 512 / 无截图污染 / versionCode 递增），
+#   但它无法判断「源码是否重建过」—— 那是上面第 4、5 步的职责。
 #
 # ─────────────────────────────────────────────────────────────
 # 为什么是 WebView 壳而不是 TWA：
@@ -59,6 +75,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # guard_payload.py 需要 HEAD^ 比对 versionCode
+
+      # 静态守门：gradle 打包前拦截结构性复发（P0 注入改写 DOM / P1 图标缺失 /
+      # 单文件化被破坏 / 载荷污染 / versionCode 未递增）。纯 Python，无需 Chrome。
+      - name: Guard APK payload (static invariants)
+        run: python3 scripts/guard_payload.py
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4

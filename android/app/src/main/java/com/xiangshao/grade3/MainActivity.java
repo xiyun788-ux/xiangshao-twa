@@ -22,7 +22,7 @@ import java.util.Collections;
 /**
  * 英语小花园 —— 全屏 WebView 原生壳。
  *
- * 加载方式（v1.2.1 起，file:// 单文件直载 + WebView 配置对齐）：
+ * 加载方式（v1.2.0 起 file:// 单文件直载；v1.2.2 起原生层不再改写 DOM）：
  *   用 file:///android_asset/www/index.html 直接加载 App 内嵌的「单文件整站」。
  *   · 整站（index.html）在构建期由 vite-plugin-singlefile 把 JS/CSS 全内联进一个文件；
  *   · 音频 / 字体 / 图标 / 插画作为同目录的 static/ 兄弟资源随包发布；
@@ -53,7 +53,8 @@ import java.util.Collections;
  *
  * 设计目标（不变）：
  *  1. 真正全屏无地址栏；2. 独立图标、返回键在 App 内导航；3. 不依赖域名验证；
- *  4. 自动隐藏站点里的"装到手机桌面"提示条（已是 App，不需要它）。
+ *  4. App 内不显示「装到手机桌面」提示条 —— 由前端 InstallHint.vue 按
+ *     file:// / UA(XiangshaoApp) 自行判断，原生层绝不遍历 DOM 改样式。
  */
 public class MainActivity extends Activity {
 
@@ -73,9 +74,11 @@ public class MainActivity extends Activity {
      *  见提交 e89bad3 的自述「offlineView 实为白色失败页」）。
      *
      * 默认 false 是安全默认：JS 探测尚未完成 / 主帧真的失败时，失败页照常显示。
-     * 所有 WebViewClient 回调都在 UI 线程，普通 boolean 即可，无需 volatile。
+     * 官方文档：WebViewClient 生命周期回调与 evaluateJavascript 的回调都在 UI 线程；
+     * 这里仍加 volatile，纯粹是为了在个别 OEM ROM 回调线程异常时不出现可见性问题
+     * （零成本，且不改变任何编译期签名）。
      */
-    private boolean pageRendered = false;
+    private volatile boolean pageRendered = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -107,20 +110,28 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 progressBar.setVisibility(View.GONE);
-                // 一次 JS 调用同时做两件事：隐藏站点"装到手机桌面"提示条 +
-                // 探测 #app 是否真的渲染出了实质内容（作为「页面是好的」判据）。
+                // 只做「纯只读」的渲染 / 可见性探测，绝不改写 DOM。
                 //
-                // 判据与 verify_apk_payload.mjs 的 guard probe 断言保持一致：
-                // 真实主帧失败时 WebView 显示的是内部错误页，没有 #app → 返回 '0'；
-                // 页面成功挂载 → 返回 '1'。
+                // 历史 P0 白屏根因（v1.2.2 修复）：这里曾用 querySelectorAll('*') 遍历
+                //   + textContent 匹配「装到手机桌面」去隐藏站点的安装提示条。
+                //   单文件化后 <head> 内联 JS 里就含这段文案，而 querySelectorAll('*')[0]
+                //   恰好是 <html> → 整页 display:none；脚本仍返回 '1' 让 pageRendered=true
+                //   → 连失败页都被收起 → 用户看到「纯白且无任何错误提示」的死屏。
+                // 现由前端 InstallHint.vue 按运行期环境决定不渲染，原生层不再遍历 DOM。
+                //
+                // 判据与 verify_apk_payload.mjs / verify_native_inject.mjs 保持一致：
+                // 真实主帧失败时 WebView 显示内部错误页，没有 #app → 返回 '0'；
+                // 页面成功挂载且确实可见 → 返回 '1'。
+                // <html>/#app 的可见性断言是防复发第二道闸：今后无论以何种原因把整页
+                // 隐藏，pageRendered 都会是 false，失败页会如实弹出而不是白屏。
                 view.evaluateJavascript(
-                        "(function(){try{var els=document.querySelectorAll('*');"
-                                + "for(var i=0;i<els.length;i++){"
-                                + "var t=els[i].textContent||'';"
-                                + "if(t.indexOf('装到手机桌面')>=0){els[i].style.display='none';break;}}"
-                                + "var a=document.getElementById('app');"
-                                + "return (a && a.childElementCount>0 && (a.innerText||'').trim().length>50) ? '1':'0';"
-                                + "}catch(e){return '0';}})();",
+                        "(function(){try{var a=document.getElementById('app');"
+                                + "var d=document.documentElement;"
+                                + "var ok=a && a.childElementCount>0 && (a.innerText||'').trim().length>50"
+                                + " && getComputedStyle(d).display!=='none'"
+                                + " && getComputedStyle(a).display!=='none'"
+                                + " && a.getBoundingClientRect().width>0;"
+                                + "return ok?'1':'0';}catch(e){return '0';}})();",
                         value -> {
                             pageRendered = value != null && value.contains("1");
                             // 页面确实已渲染成功 → 撤掉此前可能因瞬时错误 / OEM 误报盖上的失败页。

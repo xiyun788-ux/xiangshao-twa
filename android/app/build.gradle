@@ -9,10 +9,12 @@ android {
         applicationId 'com.xiangshao.grade3'
         minSdkVersion 24
         targetSdkVersion 36
-        // 本轮加固改动了 WebView 配置与前端产物，versionCode 必须递增，
-        // 否则已装用户无法覆盖升级（Android 要求 versionCode 严格大于已装版本）。
-        versionCode 5
-        versionName '1.2.1'
+        // v1.2.1（versionCode 5）已构建并发布到 GitHub Release，版本号已被占用。
+        // 本版含 pageRendered 失败页守卫 / isMainDocumentUrl 等 MainActivity 增量加固，
+        // 必须递增 versionCode，否则已装用户无法覆盖升级
+        // （Android 要求 versionCode 严格大于已装版本）。
+        versionCode 6
+        versionName '1.2.2'
     }
 
     compileOptions {
