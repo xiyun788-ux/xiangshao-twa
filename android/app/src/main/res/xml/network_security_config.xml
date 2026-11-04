@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  本 App 完全离线：WebView 只通过 http://127.0.0.1:8080/ 加载应用自己内嵌的本地服务器，
-  不连任何外部域名。因此允许明文（http）是安全的，且对 127.0.0.1 必须放行，否则 WebView
-  会拒绝连本地服务器、直接报 ERR_CLEARTEXT_NOT_PERMITTED → 整页白屏（offlineView）。
+  当前架构（v1.2.0 起）：WebView 直接加载 file:///android_asset/www/index.html，
+  整站随 APK 打包，运行时**不发起任何 http(s) 请求**，没有本地 HTTP 服务器、没有端口、
+  也不连远端站点。因此不再需要任何明文字放行。
 
-  早期版本只在 domain-config 里针对 127.0.0.1 放行，但部分国产 ROM 不认「IP 形式」的
-  domain 规则，导致本地服务连不上。这里改用 base-config 全局放行明文，跨设备最稳妥。
-  应用本身不发起任何远程请求，故无隐私风险。
+  历史包袱说明（防止有人照旧注释把架构改回去）：
+  · 早期版本曾用 java.net.ServerSocket 在 127.0.0.1:8080 提供整站，靠本文件
+    cleartextTrafficPermitted="true" 放行明文；部分国产 ROM 不认 IP 形式的
+    domain-config 规则，导致 ERR_CLEARTEXT_NOT_PERMITTED → 整页白屏。
+  · 该方案已整体删除（LocalServer.java 已移除），改回明文放行只会重新引入
+    「设备相关行为差异」这一复发源，且对本 App 毫无收益。
+
+  设为 false 是安全收敛：即使将来某个第三方 SDK 或误加的外链想走 http，
+  也会在框架层被明确拒绝，而不是悄悄联网。对 file:// 加载无任何影响。
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

@@ -25,15 +25,18 @@
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:gravity="center"
-        android:background="#FFFFFF"
+        android:background="#FFF4E5"
         android:visibility="gone"
         android:padding="32dp">
 
+        <!-- 文案/底色与旧「本地 HTTP 服务器」时代解耦：
+             现在的加载方式是 file:///android_asset/www/index.html，没有本地服务。
+             浅橙底 + 深色标题也不会被误认成「纯白空屏」。 -->
         <TextView
             android:id="@+id/offlineTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="本地服务未能启动"
+            android:text="页面加载失败"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="#333333" />
@@ -45,7 +48,7 @@
             android:layout_marginTop="12dp"
             android:text="请点击重试；若仍失败，请把下面这行红字截图发我。"
             android:textSize="15sp"
-            android:textColor="#888888" />
+            android:textColor="#666666" />
 
         <TextView
             android:id="@+id/offlineDetail"
